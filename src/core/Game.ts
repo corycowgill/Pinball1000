@@ -16,6 +16,8 @@ import { buildLTrainLoop } from '../table/elements/LTrainLoop';
 import { buildCubsRamp } from '../table/elements/CubsRamp';
 import { DropTarget, DropTargetBank } from '../table/elements/DropTarget';
 import { Spinner } from '../table/elements/Spinner';
+import { TeamTarget } from '../table/elements/TeamTarget';
+import { ModeManager } from '../game/Modes/TeamMode';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -51,10 +53,13 @@ export class Game {
   private ramps: Ramp[] = [];
   private dropBank!: DropTargetBank;
   private spinner!: Spinner;
+  private teamTargets: TeamTarget[] = [];
+  private teamTargetByHandle = new Map<number, TeamTarget>();
 
   private bus!: EventBus;
   private scoring!: Scoring;
   private chicagoBonus!: ChicagoBonus;
+  private modeManager!: ModeManager;
   private hud!: HUD;
   private callouts!: ComicCallouts;
 
@@ -96,6 +101,7 @@ export class Game {
     this.bus = new EventBus();
     this.scoring = new Scoring(this.bus);
     this.chicagoBonus = new ChicagoBonus(this.bus);
+    this.modeManager = new ModeManager(this.bus, this.scoring);
 
     this.buildLighting();
     this.playfield = new Playfield(this.scene, this.world);
@@ -120,6 +126,7 @@ export class Game {
     // White Sox drop target bank + Hawks spinner.
     this.buildDropBank();
     this.buildSpinner();
+    this.buildTeamTargets();
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -269,6 +276,21 @@ export class Game {
     );
   }
 
+  private buildTeamTargets(): void {
+    for (const cfg of ELEMENTS.teamTargets) {
+      const t = new TeamTarget(
+        this.world,
+        this.bus,
+        this.playfield.tiltedRoot,
+        cfg.x,
+        cfg.z,
+        cfg.team,
+      );
+      this.teamTargets.push(t);
+      this.teamTargetByHandle.set(t.handle, t);
+    }
+  }
+
   private buildSlingshots(): void {
     const left = new Slingshot(
       this.world,
@@ -318,6 +340,11 @@ export class Game {
         drop.onHit();
         return;
       }
+      const team = this.teamTargetByHandle.get(other.handle);
+      if (team) {
+        team.onHit();
+        return;
+      }
     });
   }
 
@@ -351,8 +378,16 @@ export class Game {
     for (const b of this.bumpers) b.update();
     for (const s of this.slingshots) s.update();
     for (const t of this.dropBank.targets) t.update();
+    for (const t of this.teamTargets) t.update();
     this.spinner.syncRender(alpha);
     this.chicagoLanes.syncRender();
+    this.modeManager.update();
+    const active = this.modeManager.activeMode;
+    this.hud.setMode(
+      active
+        ? `${active.banner}  ${Math.ceil(this.modeManager.remainingMs / 1000)}s`
+        : 'PLAY',
+    );
     this.hud.update();
     this.debug.update(this.world);
     this.renderer.render(this.scene, this.camera);
