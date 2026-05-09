@@ -23,6 +23,7 @@ import { SueHead } from '../table/elements/SueHead';
 import { SueMiniGame } from '../game/Modes/SueMiniGame';
 import { StateMachine, type GameState } from '../game/StateMachine';
 import { showAttract, showBallReady, showBonusCount, showGameOver, loadHighScore, saveHighScore } from '../ui/Overlays';
+import { AudioBus } from '../audio/AudioBus';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -65,6 +66,7 @@ export class Game {
   private sueMiniGame!: SueMiniGame;
   private stateMachine!: StateMachine;
   private overlayDismiss: (() => void) | null = null;
+  private audio!: AudioBus;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -112,6 +114,7 @@ export class Game {
     this.scoring = new Scoring(this.bus);
     this.chicagoBonus = new ChicagoBonus(this.bus);
     this.modeManager = new ModeManager(this.bus, this.scoring);
+    this.audio = new AudioBus(this.bus);
 
     this.buildLighting();
     this.playfield = new Playfield(this.scene, this.world);
