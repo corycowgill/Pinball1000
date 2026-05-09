@@ -62,6 +62,17 @@ export class Input {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Synthetically dispatch an action — used by touch controls so the same
+   * downstream wiring (Game's input handler) responds identically to
+   * keyboard and touch.
+   */
+  dispatch(action: InputAction, type: 'down' | 'up'): void {
+    if (type === 'down') this.held.add(action);
+    else this.held.delete(action);
+    for (const l of this.listeners) l(action, type);
+  }
+
   private readonly handleKeyDown = (e: KeyboardEvent): void => {
     const action = KEY_MAP[e.code];
     if (!action) return;

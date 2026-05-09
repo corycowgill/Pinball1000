@@ -2,8 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Chicago Pinball</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
@@ -29,6 +32,14 @@
         </div>
       </div>
       <div id="callouts"></div>
+      <div id="touch-controls" hidden>
+        <div id="touch-flipper-left" class="touch-zone touch-flipper" aria-label="Left flipper"></div>
+        <div id="touch-flipper-right" class="touch-zone touch-flipper" aria-label="Right flipper"></div>
+        <div id="touch-plunger" class="touch-zone" aria-label="Plunger">PLUNGER</div>
+        <div id="touch-nudge-left" class="touch-zone touch-nudge">&larr;</div>
+        <div id="touch-nudge-right" class="touch-zone touch-nudge">&rarr;</div>
+        <div id="touch-launch" class="touch-zone" aria-label="Start / Launch">START</div>
+      </div>
       <div id="loader"><div class="loader-text">LOADING THE WINDY CITY&hellip;</div></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

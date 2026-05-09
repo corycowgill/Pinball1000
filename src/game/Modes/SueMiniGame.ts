@@ -61,9 +61,11 @@ export class SueMiniGame {
   private buildOverlay(): void {
     const overlay = document.createElement('div');
     overlay.id = 'sue-overlay';
+    const isTouch = (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
+    const tapHint = isTouch ? 'Tap the bones!' : 'Smash bones — Space / Shift / Z / /';
     overlay.innerHTML = `
       <div id="sue-title">FEEDING FRENZY!</div>
-      <div id="sue-subtitle">Smash bones — Space / Shift / Z / /</div>
+      <div id="sue-subtitle">${tapHint}</div>
       <div id="sue-bones"></div>
       <div id="sue-timer">20.0</div>
     `;
@@ -116,7 +118,17 @@ export class SueMiniGame {
         fontSize: '64px',
         textShadow: '4px 4px 0 var(--ink)',
         transition: 'transform 200ms ease-out, opacity 200ms ease-out',
+        // Bones are tappable on touch — needs pointer-events to override
+        // the parent overlay's `none`.
+        pointerEvents: 'auto',
+        cursor: 'pointer',
+        padding: '8px 12px',
+        touchAction: 'none',
       } as Partial<CSSStyleDeclaration>);
+      bone.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        this.breakBone();
+      });
       bonesHost.appendChild(bone);
       this.bones.push(bone);
     }

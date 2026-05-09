@@ -26,6 +26,7 @@ import { showAttract, showBallReady, showBonusCount, showGameOver, loadHighScore
 import { AudioBus } from '../audio/AudioBus';
 import { Settings } from './Settings';
 import type { TeamId } from '../table/layout';
+import { isTouchDevice, setupTouchControls, showStartButton } from '../ui/TouchControls';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -84,9 +85,12 @@ export class Game {
 
   private drainBelowY!: number;
 
+  private readonly isMobile: boolean;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.renderer = new Renderer(canvas);
+    this.isMobile = isTouchDevice();
+    this.renderer = new Renderer(canvas, { mobile: this.isMobile });
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x05070a);
     this.scene.fog = new THREE.Fog(0x05070a, 3.5, 10);
@@ -227,6 +231,10 @@ export class Game {
         }
       }
     });
+    if (this.isMobile) {
+      setupTouchControls(this.input);
+    }
+
     this.loop.start();
     this.stateMachine.begin();
   }
@@ -414,6 +422,11 @@ export class Game {
       this.overlayDismiss();
       this.overlayDismiss = null;
     }
+    // Show the on-screen START button only when the player can start a game.
+    if (this.isMobile) {
+      showStartButton(state === 'attract' || state === 'gameOver');
+    }
+
     switch (state) {
       case 'attract': {
         this.hud.setMode('ATTRACT');
@@ -519,7 +532,22 @@ export class Game {
   private handleResize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.camera.aspect = w / h;
+    const aspect = w / h;
+    this.camera.aspect = aspect;
+
+    // Pull the camera back on narrow / portrait screens so the whole table
+    // stays in frame. FOV is the vertical angle in three.js, so a tall
+    // viewport already shows a generous slice of Z; we just need more X
+    // breathing room horizontally on phones.
+    if (aspect < 1.0) {
+      // Portrait: scale framing distance by 1/aspect so the table width fits.
+      const fromY = TABLE.depth * 0.65 * (1 / Math.max(aspect, 0.5));
+      const fromZ = Z_BOTTOM + 0.45 + (1 - aspect) * 0.4;
+      this.camera.position.set(0, fromY, fromZ);
+    } else {
+      this.camera.position.set(0, TABLE.depth * 0.65, Z_BOTTOM + 0.45);
+    }
+    this.camera.lookAt(0, 0, -TABLE.depth * 0.05);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   }
