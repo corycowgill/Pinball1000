@@ -26,13 +26,21 @@ function makeOverlay(id: string): HTMLElement {
   return el;
 }
 
+function isTouch(): boolean {
+  return (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
+}
+
 export function showAttract(highScore: number): { dismiss: () => void } {
   const el = makeOverlay('attract-overlay');
+  const startPrompt = isTouch() ? 'TAP START TO PLAY' : 'PRESS ENTER TO PLAY';
+  const controlsHint = isTouch()
+    ? 'LEFT / RIGHT HALVES = FLIPPERS &middot; PLUNGER BUTTON TO LAUNCH'
+    : 'SHIFT = FLIPPERS &middot; SPACE = PLUNGER &middot; ARROWS = NUDGE &middot; D = DEBUG';
   el.innerHTML = `
     <div style="font-size:84px;letter-spacing:0.18em;-webkit-text-stroke:5px var(--ink);text-shadow:8px 8px 0 var(--ink);color:var(--bears-orange);">CHICAGO</div>
     <div style="font-size:36px;color:var(--paper);text-shadow:3px 3px 0 var(--ink);margin-top:-8px;">PINBALL</div>
-    <div style="font-size:24px;color:var(--halo);margin-top:48px;animation:pulse 1200ms ease-in-out infinite;">PRESS ENTER TO PLAY</div>
-    <div style="font-size:14px;color:var(--paper);opacity:0.6;margin-top:32px;">SHIFT = FLIPPERS &middot; SPACE = PLUNGER &middot; ARROWS = NUDGE &middot; D = DEBUG</div>
+    <div style="font-size:24px;color:var(--halo);margin-top:48px;animation:pulse 1200ms ease-in-out infinite;">${startPrompt}</div>
+    <div style="font-size:14px;color:var(--paper);opacity:0.6;margin-top:32px;text-align:center;padding:0 16px;">${controlsHint}</div>
     ${highScore > 0 ? `<div style="font-size:18px;color:var(--paper);margin-top:24px;">HIGH SCORE: ${highScore.toLocaleString('en-US')}</div>` : ''}
   `;
   return {
@@ -46,9 +54,10 @@ export function showAttract(highScore: number): { dismiss: () => void } {
 export function showBallReady(ballNum: number, maxBalls: number): { dismiss: () => void } {
   const el = makeOverlay('ballready-overlay');
   el.style.background = 'transparent';
+  const launchPrompt = isTouch() ? 'TAP & HOLD PLUNGER TO LAUNCH' : 'PRESS SPACE TO LAUNCH';
   el.innerHTML = `
     <div style="font-size:48px;color:var(--bears-orange);text-shadow:5px 5px 0 var(--ink);animation:pulse 800ms ease-in-out infinite;">BALL ${ballNum} / ${maxBalls}</div>
-    <div style="font-size:20px;color:var(--paper);margin-top:8px;">PRESS SPACE TO LAUNCH</div>
+    <div style="font-size:20px;color:var(--paper);margin-top:8px;">${launchPrompt}</div>
   `;
   return {
     dismiss: () => {
@@ -96,7 +105,7 @@ export function showGameOver(finalScore: number, isHighScore: boolean): { dismis
     <div style="font-size:24px;color:var(--paper);margin-top:32px;">FINAL SCORE</div>
     <div style="font-size:64px;color:var(--bears-orange);text-shadow:5px 5px 0 var(--ink);margin-top:4px;">${finalScore.toLocaleString('en-US')}</div>
     ${isHighScore ? `<div style="font-size:28px;color:var(--halo);margin-top:24px;animation:pulse 800ms ease-in-out infinite;">NEW HIGH SCORE!</div>` : ''}
-    <div style="font-size:18px;color:var(--paper);opacity:0.8;margin-top:48px;animation:pulse 1200ms ease-in-out infinite;">PRESS ENTER FOR ANOTHER GAME</div>
+    <div style="font-size:18px;color:var(--paper);opacity:0.8;margin-top:48px;animation:pulse 1200ms ease-in-out infinite;">${isTouch() ? 'TAP START FOR ANOTHER GAME' : 'PRESS ENTER FOR ANOTHER GAME'}</div>
   `;
   return {
     dismiss: () => {
