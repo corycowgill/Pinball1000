@@ -18,6 +18,7 @@ import { DropTarget, DropTargetBank } from '../table/elements/DropTarget';
 import { Spinner } from '../table/elements/Spinner';
 import { TeamTarget } from '../table/elements/TeamTarget';
 import { ModeManager } from '../game/Modes/TeamMode';
+import { Bean } from '../table/elements/Bean';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -55,6 +56,7 @@ export class Game {
   private spinner!: Spinner;
   private teamTargets: TeamTarget[] = [];
   private teamTargetByHandle = new Map<number, TeamTarget>();
+  private bean!: Bean;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -127,6 +129,7 @@ export class Game {
     this.buildDropBank();
     this.buildSpinner();
     this.buildTeamTargets();
+    this.bean = new Bean(this.world, this.bus, this.ball, this.playfield.tiltedRoot, this.renderer.raw);
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -343,6 +346,10 @@ export class Game {
       const team = this.teamTargetByHandle.get(other.handle);
       if (team) {
         team.onHit();
+        return;
+      }
+      if (other.handle === this.bean.handle) {
+        this.bean.onHit();
         return;
       }
     });
