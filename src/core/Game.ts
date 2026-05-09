@@ -21,6 +21,8 @@ import { ModeManager } from '../game/Modes/TeamMode';
 import { Bean } from '../table/elements/Bean';
 import { SueHead } from '../table/elements/SueHead';
 import { SueMiniGame } from '../game/Modes/SueMiniGame';
+import { StateMachine, type GameState } from '../game/StateMachine';
+import { showAttract, showBallReady, showBonusCount, showGameOver, loadHighScore, saveHighScore } from '../ui/Overlays';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -61,6 +63,8 @@ export class Game {
   private bean!: Bean;
   private sueHead!: SueHead;
   private sueMiniGame!: SueMiniGame;
+  private stateMachine!: StateMachine;
+  private overlayDismiss: (() => void) | null = null;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -155,6 +159,18 @@ export class Game {
     this.hud.setBall(1, 3);
     this.callouts = new ComicCallouts(this.bus, this.camera, this.canvas);
 
+    // State machine — owns the high-level game flow.
+    this.stateMachine = new StateMachine(
+      this.bus,
+      {
+        scoring: this.scoring,
+        chicagoBonus: this.chicagoBonus,
+        modeManager: this.modeManager,
+        sueMiniGame: this.sueMiniGame,
+      },
+      (s) => this.onStateChange(s),
+    );
+
     // Now that the scene + camera exist, attach the post-processing chain.
     this.renderer.attach(this.scene, this.camera);
 
@@ -165,17 +181,20 @@ export class Game {
   start(): void {
     this.input.attach();
     this.input.on((action, type) => {
-      if (action === 'flipperLeft') {
+      // Block gameplay input when not in a playable state.
+      const playable = this.stateMachine.state === 'ballReady' || this.stateMachine.state === 'ballInPlay';
+
+      if (action === 'flipperLeft' && playable) {
         if (type === 'down') this.flipperLeft.press();
         else this.flipperLeft.release();
         return;
       }
-      if (action === 'flipperRight') {
+      if (action === 'flipperRight' && playable) {
         if (type === 'down') this.flipperRight.press();
         else this.flipperRight.release();
         return;
       }
-      if (action === 'plunger') {
+      if (action === 'plunger' && playable) {
         if (type === 'down') this.plunger.startCharge();
         else {
           if (this.plunger.release(this.ball)) {
@@ -186,9 +205,14 @@ export class Game {
       }
       if (type !== 'down') return;
       if (action === 'debugToggle') this.debug.toggle();
-      if (action === 'launch') this.ball.respawn(this.playfield.ballSpawnWorld);
+      if (action === 'launch') {
+        if (this.stateMachine.state === 'attract' || this.stateMachine.state === 'gameOver') {
+          this.stateMachine.startGame();
+        }
+      }
     });
     this.loop.start();
+    this.stateMachine.begin();
   }
 
   stop(): void {
@@ -369,6 +393,54 @@ export class Game {
     });
   }
 
+  private onStateChange(state: GameState): void {
+    if (this.overlayDismiss) {
+      this.overlayDismiss();
+      this.overlayDismiss = null;
+    }
+    switch (state) {
+      case 'attract': {
+        this.hud.setMode('ATTRACT');
+        const o = showAttract(loadHighScore());
+        this.overlayDismiss = o.dismiss;
+        // Park the ball in the plunger lane while attract is showing.
+        this.ball.respawn(this.playfield.ballSpawnWorld);
+        this.ball.body.setEnabled(false);
+        break;
+      }
+      case 'ballReady': {
+        this.hud.setMode('PLUNGE');
+        this.hud.setBall(this.stateMachine.ballNumber, this.stateMachine.maxBalls);
+        this.ball.body.setEnabled(true);
+        this.ball.respawn(this.playfield.ballSpawnWorld);
+        const o = showBallReady(this.stateMachine.ballNumber, this.stateMachine.maxBalls);
+        this.overlayDismiss = o.dismiss;
+        break;
+      }
+      case 'ballInPlay':
+        this.hud.setMode('PLAY');
+        break;
+      case 'bonusCount': {
+        const bonus = this.stateMachine.computeBonus();
+        this.hud.setMode('BONUS');
+        this.ball.body.setEnabled(false);
+        showBonusCount(bonus, () => {
+          if (bonus > 0) this.scoring.award(bonus);
+          this.stateMachine.bonusCountFinished();
+        });
+        break;
+      }
+      case 'gameOver': {
+        this.hud.setMode('GAME OVER');
+        const isHigh = saveHighScore(this.scoring.score);
+        const o = showGameOver(this.scoring.score, isHigh);
+        this.overlayDismiss = o.dismiss;
+        this.ball.body.setEnabled(false);
+        break;
+      }
+    }
+  }
+
   private positionCamera(): void {
     const fromY = TABLE.depth * 0.65;
     const fromZ = Z_BOTTOM + 0.45;
@@ -386,9 +458,13 @@ export class Game {
     for (const ramp of this.ramps) ramp.tick();
     this.sueHead.tick();
 
-    if (this.ball.position.y < this.drainBelowY) {
+    // Drain detection — emit once per drain. The state machine's bonus-count
+    // -> ballReady transition is what re-spawns and re-enables the ball.
+    if (this.ball.body.isEnabled() && this.ball.position.y < this.drainBelowY) {
+      // Park the body at the spawn point so the ball doesn't keep falling
+      // forever during the bonus-count animation.
+      this.ball.body.setEnabled(false);
       this.bus.emit({ type: 'ballDrained' });
-      this.ball.respawn(this.playfield.ballSpawnWorld);
     }
   }
 
