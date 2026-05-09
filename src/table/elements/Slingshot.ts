@@ -79,7 +79,8 @@ export class Slingshot {
   }
 
   onHit(): void {
-    const popStrength = 0.16;
+    // Tuned: slings should kick the ball back upfield with authority.
+    const popStrength = 0.20;
     this.ball.body.applyImpulse(
       {
         x: this.worldNormal.x * popStrength,

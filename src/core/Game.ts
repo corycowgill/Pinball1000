@@ -24,6 +24,8 @@ import { SueMiniGame } from '../game/Modes/SueMiniGame';
 import { StateMachine, type GameState } from '../game/StateMachine';
 import { showAttract, showBallReady, showBonusCount, showGameOver, loadHighScore, saveHighScore } from '../ui/Overlays';
 import { AudioBus } from '../audio/AudioBus';
+import { Settings } from './Settings';
+import type { TeamId } from '../table/layout';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -67,6 +69,7 @@ export class Game {
   private stateMachine!: StateMachine;
   private overlayDismiss: (() => void) | null = null;
   private audio!: AudioBus;
+  private settings!: Settings;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -177,6 +180,12 @@ export class Game {
     // Now that the scene + camera exist, attach the post-processing chain.
     this.renderer.attach(this.scene, this.camera);
 
+    this.settings = new Settings(this.renderer, {
+      onAudioMutedChange: (m) => this.audio.setMuted(m),
+      onRespawnBall: () => this.ball.respawn(this.playfield.ballSpawnWorld),
+      onForceModeStart: (team) => this.bus.emit({ type: 'teamTargetHit', team: team as TeamId }),
+    });
+
     this.wireContactHandlers();
     this.handleResize();
   }
@@ -208,6 +217,10 @@ export class Game {
       }
       if (type !== 'down') return;
       if (action === 'debugToggle') this.debug.toggle();
+      if (action === 'tweakToggle') this.settings.toggle();
+      if (action === 'nudgeLeft' && playable) this.nudgeBall(-0.04, 0);
+      if (action === 'nudgeRight' && playable) this.nudgeBall(0.04, 0);
+      if (action === 'nudgeUp' && playable) this.nudgeBall(0, -0.04);
       if (action === 'launch') {
         if (this.stateMachine.state === 'attract' || this.stateMachine.state === 'gameOver') {
           this.stateMachine.startGame();
@@ -442,6 +455,15 @@ export class Game {
         break;
       }
     }
+  }
+
+  /** Apply a nudge impulse to the ball in playfield-local axes (X = sideways,
+   *  Z = forward toward CHICAGO). Used by arrow keys. */
+  private nudgeBall(localDx: number, localDz: number): void {
+    if (!this.ball.body.isEnabled()) return;
+    const v = new THREE.Vector3(localDx, 0, localDz);
+    v.applyQuaternion(this.playfield.tiltedRoot.getWorldQuaternion(new THREE.Quaternion()));
+    this.ball.body.applyImpulse({ x: v.x, y: v.y, z: v.z }, true);
   }
 
   private positionCamera(): void {
