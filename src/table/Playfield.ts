@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { World } from '../physics/World';
 import { Materials } from '../physics/Materials';
 import { TABLE, TILT_RAD, COLORS, ELEMENTS, BALL, Z_BOTTOM, Z_TOP, X_LEFT, X_RIGHT } from './layout';
+import { makeCelMaterial } from '../render/CelMaterial';
 
 /**
  * Builds the static playfield: deck, perimeter walls, drain lane, ball trough.
@@ -41,12 +42,12 @@ export class Playfield {
   }
 
   private buildDeck(): void {
-    // Visual deck — Chicago skyline blue felt.
+    // Visual deck — Chicago skyline blue felt with a soft cel ramp so the
+    // tilt direction reads even on flat shading.
     const geom = new THREE.BoxGeometry(TABLE.width, TABLE.thickness, TABLE.depth);
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = makeCelMaterial({
       color: COLORS.field,
-      roughness: 0.95,
-      metalness: 0.0,
+      rimStrength: 0.0,
     });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.y = -TABLE.thickness / 2;
@@ -76,10 +77,11 @@ export class Playfield {
   }
 
   private buildPerimeterWalls(): void {
-    const wallMat = new THREE.MeshStandardMaterial({
+    const wallMat = makeCelMaterial({
       color: COLORS.bearsNavy,
-      roughness: 0.4,
-      metalness: 0.3,
+      rimColor: COLORS.halo,
+      rimStrength: 0.55,
+      rimPower: 2.4,
     });
     const wallY = TABLE.wallHeight / 2;
 
@@ -115,9 +117,10 @@ export class Playfield {
    * in BallController (chunk 4) — for now we just shape the geometry.
    */
   private buildDrainGuides(): void {
-    const guideMat = new THREE.MeshStandardMaterial({
+    const guideMat = makeCelMaterial({
       color: COLORS.bearsNavy,
-      roughness: 0.5,
+      rimColor: COLORS.halo,
+      rimStrength: 0.45,
     });
 
     // Left drain guide — angled bar from outer wall to flipper pivot.

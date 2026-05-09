@@ -3,6 +3,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { World } from '../../physics/World';
 import { Materials } from '../../physics/Materials';
 import { COLORS, TABLE } from '../layout';
+import { makeCelMaterial } from '../../render/CelMaterial';
+import { addOutline } from '../../render/OutlinePass';
 
 /**
  * Pinball flipper. A dynamic capsule body anchored to the playfield via a
@@ -51,15 +53,16 @@ export class Flipper {
     // 2) Mesh — a tapered cuboid for now (real flipper-shaped GLB later).
     const geom = new THREE.BoxGeometry(opts.length, opts.thickness, opts.thickness * 1.6);
     geom.translate(opts.length / 2, 0, 0); // origin at the pivot end
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = makeCelMaterial({
       color: opts.color,
-      roughness: 0.3,
-      metalness: 0.4,
+      rimStrength: 0.55,
+      rimPower: 2.2,
     });
     this.mesh = new THREE.Mesh(geom, mat);
     this.mesh.castShadow = true;
     // Mesh lives at scene root because its body is in world space.
     opts.meshParent.parent?.add(this.mesh);
+    addOutline(this.mesh, { thickness: 1.4 });
 
     // 3) Body — dynamic so the joint motor can drive it.
     // Initial rotation = parent's tilt * restAngle around local Y.

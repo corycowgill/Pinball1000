@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { World } from '../../physics/World';
 import { Materials } from '../../physics/Materials';
 import { BALL, COLORS } from '../layout';
+import { addOutline } from '../../render/OutlinePass';
 
 /**
  * The pinball. Dynamic body with CCD enabled (essential — pinballs are the
@@ -43,6 +44,9 @@ export class Ball {
     this.mesh = new THREE.Mesh(geom, mat);
     this.mesh.castShadow = true;
     scene.add(this.mesh);
+
+    // Comic ink outline so the ball reads against any background.
+    addOutline(this.mesh, { thickness: 1.6 });
 
     this.prevPos.copy(spawnWorld);
     this.currPos.copy(spawnWorld);

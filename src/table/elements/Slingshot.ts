@@ -4,6 +4,8 @@ import type { World } from '../../physics/World';
 import type { EventBus } from '../../game/Events';
 import type { Ball } from './Ball';
 import { COLORS, TABLE } from '../layout';
+import { makeCelMaterial } from '../../render/CelMaterial';
+import { addOutline } from '../../render/OutlinePass';
 
 /**
  * Slingshot — angled triangular kicker pad above each flipper. Detects ball
@@ -35,12 +37,10 @@ export class Slingshot {
     // Visual — a wedge oriented so its hypotenuse faces inward toward the
     // center of the table (where the ball would approach the flipper from).
     const geom = new THREE.BoxGeometry(len, height, thickness);
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = makeCelMaterial({
       color: id === 'left' ? COLORS.bullsRed : COLORS.cubsBlue,
-      roughness: 0.4,
-      metalness: 0.4,
-      emissive: 0x000000,
-      emissiveIntensity: 0,
+      rimStrength: 0.55,
+      rimPower: 2.0,
     });
     this.mesh = new THREE.Mesh(geom, mat);
     // Rotate so the long edge angles up-toward-the-flipper.
@@ -49,6 +49,7 @@ export class Slingshot {
     this.mesh.rotation.y = rotY;
     this.mesh.castShadow = true;
     parent.add(this.mesh);
+    addOutline(this.mesh, { thickness: 1.3 });
 
     parent.updateWorldMatrix(true, false);
     this.mesh.updateWorldMatrix(true, false);
@@ -99,7 +100,7 @@ export class Slingshot {
 
   update(): void {
     const flashing = performance.now() < this.flashUntil;
-    const mat = this.mesh.material as THREE.MeshStandardMaterial;
+    const mat = this.mesh.material as THREE.MeshToonMaterial;
     if (flashing) {
       mat.emissive.set(0xffffff);
       mat.emissiveIntensity = 1.2;
