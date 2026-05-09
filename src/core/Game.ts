@@ -8,13 +8,20 @@ import { Playfield } from '../table/Playfield';
 import { Ball } from '../table/elements/Ball';
 import { Flipper, FLIPPER_DIMENSIONS, FLIPPER_COLORS } from '../table/elements/Flipper';
 import { Plunger } from '../table/elements/Plunger';
+import { Bumper } from '../table/elements/Bumper';
+import { Slingshot } from '../table/elements/Slingshot';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
+import { EventBus } from '../game/Events';
+import { Scoring } from '../game/Scoring';
+import { HUD } from '../ui/HUD';
+import { ComicCallouts } from '../ui/ComicCallouts';
 
 /**
  * Top-level orchestrator. Owns renderer, input, fixed-step loop, physics
- * world, the table, ball, flippers, plunger, and (later) state machine.
+ * world, the table, ball, flippers, plunger, bumpers/slings, and (now) the
+ * scoring system + HUD.
  *
- * Chunk 4: flippers (revolute joint with motor) + plunger.
+ * Chunk 5: bumpers + slingshots + score + HUD + comic callouts.
  */
 export class Game {
   private readonly canvas: HTMLCanvasElement;
@@ -31,6 +38,17 @@ export class Game {
   private flipperLeft!: Flipper;
   private flipperRight!: Flipper;
   private plunger!: Plunger;
+  private bumpers: Bumper[] = [];
+  private slingshots: Slingshot[] = [];
+
+  private bus!: EventBus;
+  private scoring!: Scoring;
+  private hud!: HUD;
+  private callouts!: ComicCallouts;
+
+  /** Lookup from collider handle to the element that owns it. */
+  private bumperByHandle = new Map<number, Bumper>();
+  private slingByHandle = new Map<number, Slingshot>();
 
   private drainBelowY!: number;
 
@@ -63,20 +81,29 @@ export class Game {
     await World.init();
     this.world = new World();
     this.debug = new PhysicsDebug(this.scene);
+    this.bus = new EventBus();
+    this.scoring = new Scoring(this.bus);
 
     this.buildLighting();
     this.playfield = new Playfield(this.scene, this.world);
 
     this.buildFlippers();
     this.buildPlunger();
-
     this.ball = new Ball(this.scene, this.world, this.playfield.ballSpawnWorld);
+    this.buildBumpers();
+    this.buildSlingshots();
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
     this.playfield.localToWorld(0, 0, Z_BOTTOM, drainProbe);
     this.drainBelowY = drainProbe.y - 0.25;
 
+    this.hud = new HUD(this.scoring, this.bus);
+    this.hud.setMode('PLAY');
+    this.hud.setBall(1, 3);
+    this.callouts = new ComicCallouts(this.bus, this.camera, this.canvas);
+
+    this.wireContactHandlers();
     this.handleResize();
   }
 
@@ -95,7 +122,11 @@ export class Game {
       }
       if (action === 'plunger') {
         if (type === 'down') this.plunger.startCharge();
-        else this.plunger.release(this.ball);
+        else {
+          if (this.plunger.release(this.ball)) {
+            this.bus.emit({ type: 'ballLaunched' });
+          }
+        }
         return;
       }
       if (type !== 'down') return;
@@ -165,9 +196,72 @@ export class Game {
   private buildPlunger(): void {
     const baseLocal = new THREE.Vector3(ELEMENTS.plunger.x, TABLE.wallHeight * 0.4, ELEMENTS.plunger.z);
     const baseWorld = this.playfield.tiltedRoot.localToWorld(baseLocal.clone());
-    // Fire direction: -Z in playfield space (up the lane), transformed to world.
     const fireWorld = new THREE.Vector3(0, 0, -1).transformDirection(this.playfield.tiltedRoot.matrixWorld);
     this.plunger = new Plunger(this.scene, baseWorld, fireWorld);
+  }
+
+  private buildBumpers(): void {
+    for (let i = 0; i < ELEMENTS.popBumpers.length; i++) {
+      const cfg = ELEMENTS.popBumpers[i]!;
+      const b = new Bumper(
+        this.world,
+        this.bus,
+        this.ball,
+        this.playfield.tiltedRoot,
+        cfg.x,
+        cfg.z,
+        `pop${i}`,
+      );
+      this.bumpers.push(b);
+      this.bumperByHandle.set(b.handle, b);
+    }
+  }
+
+  private buildSlingshots(): void {
+    const left = new Slingshot(
+      this.world,
+      this.bus,
+      this.ball,
+      this.playfield.tiltedRoot,
+      ELEMENTS.slingLeft.x,
+      ELEMENTS.slingLeft.z,
+      'left',
+    );
+    const right = new Slingshot(
+      this.world,
+      this.bus,
+      this.ball,
+      this.playfield.tiltedRoot,
+      ELEMENTS.slingRight.x,
+      ELEMENTS.slingRight.z,
+      'right',
+    );
+    this.slingshots.push(left, right);
+    this.slingByHandle.set(left.handle, left);
+    this.slingByHandle.set(right.handle, right);
+  }
+
+  private wireContactHandlers(): void {
+    const ballHandle = this.ball.collider.handle;
+    this.world.onContact((c1, c2, started) => {
+      if (!started) return;
+      // One side must be the ball.
+      let other: typeof c1 | null = null;
+      if (c1.handle === ballHandle) other = c2;
+      else if (c2.handle === ballHandle) other = c1;
+      if (!other) return;
+
+      const bumper = this.bumperByHandle.get(other.handle);
+      if (bumper) {
+        bumper.onHit();
+        return;
+      }
+      const sling = this.slingByHandle.get(other.handle);
+      if (sling) {
+        sling.onHit();
+        return;
+      }
+    });
   }
 
   private positionCamera(): void {
@@ -184,6 +278,7 @@ export class Game {
     this.world.step();
 
     if (this.ball.position.y < this.drainBelowY) {
+      this.bus.emit({ type: 'ballDrained' });
       this.ball.respawn(this.playfield.ballSpawnWorld);
     }
   }
@@ -193,6 +288,9 @@ export class Game {
     this.flipperLeft.syncRender(alpha);
     this.flipperRight.syncRender(alpha);
     this.plunger.update();
+    for (const b of this.bumpers) b.update();
+    for (const s of this.slingshots) s.update();
+    this.hud.update();
     this.debug.update(this.world);
     this.renderer.render(this.scene, this.camera);
   }
