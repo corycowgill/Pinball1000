@@ -19,6 +19,7 @@ import { Spinner } from '../table/elements/Spinner';
 import { TeamTarget } from '../table/elements/TeamTarget';
 import { ModeManager } from '../game/Modes/TeamMode';
 import { Bean } from '../table/elements/Bean';
+import { SueHead } from '../table/elements/SueHead';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -57,6 +58,7 @@ export class Game {
   private teamTargets: TeamTarget[] = [];
   private teamTargetByHandle = new Map<number, TeamTarget>();
   private bean!: Bean;
+  private sueHead!: SueHead;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -130,6 +132,15 @@ export class Game {
     this.buildSpinner();
     this.buildTeamTargets();
     this.bean = new Bean(this.world, this.bus, this.ball, this.playfield.tiltedRoot, this.renderer.raw);
+    this.sueHead = new SueHead(this.world, this.bus, this.ball, this.playfield.tiltedRoot);
+
+    // Open Sue's jaw on every CHICAGO spell — gives the player a visible
+    // reward and a window to feed her. Auto-close after 8 seconds if the
+    // ball never makes it in.
+    this.bus.on('chicagoSpelled', () => {
+      this.sueHead.openJaw();
+      setTimeout(() => this.sueHead.closeJaw(), 8000);
+    });
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -370,6 +381,7 @@ export class Game {
     this.world.step();
     this.chicagoLanes.tick();
     for (const ramp of this.ramps) ramp.tick();
+    this.sueHead.tick();
 
     if (this.ball.position.y < this.drainBelowY) {
       this.bus.emit({ type: 'ballDrained' });
