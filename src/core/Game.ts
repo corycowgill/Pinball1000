@@ -10,9 +10,11 @@ import { Flipper, FLIPPER_DIMENSIONS, FLIPPER_COLORS } from '../table/elements/F
 import { Plunger } from '../table/elements/Plunger';
 import { Bumper } from '../table/elements/Bumper';
 import { Slingshot } from '../table/elements/Slingshot';
+import { ChicagoLanes } from '../table/elements/ChicagoLanes';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
+import { ChicagoBonus } from '../game/ChicagoBonus';
 import { HUD } from '../ui/HUD';
 import { ComicCallouts } from '../ui/ComicCallouts';
 
@@ -40,9 +42,11 @@ export class Game {
   private plunger!: Plunger;
   private bumpers: Bumper[] = [];
   private slingshots: Slingshot[] = [];
+  private chicagoLanes!: ChicagoLanes;
 
   private bus!: EventBus;
   private scoring!: Scoring;
+  private chicagoBonus!: ChicagoBonus;
   private hud!: HUD;
   private callouts!: ComicCallouts;
 
@@ -83,6 +87,7 @@ export class Game {
     this.debug = new PhysicsDebug(this.scene);
     this.bus = new EventBus();
     this.scoring = new Scoring(this.bus);
+    this.chicagoBonus = new ChicagoBonus(this.bus);
 
     this.buildLighting();
     this.playfield = new Playfield(this.scene, this.world);
@@ -92,6 +97,13 @@ export class Game {
     this.ball = new Ball(this.scene, this.world, this.playfield.ballSpawnWorld);
     this.buildBumpers();
     this.buildSlingshots();
+    this.chicagoLanes = new ChicagoLanes(
+      this.world,
+      this.bus,
+      this.ball,
+      this.chicagoBonus,
+      this.playfield.tiltedRoot,
+    );
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -276,6 +288,7 @@ export class Game {
     this.flipperLeft.cachePrev();
     this.flipperRight.cachePrev();
     this.world.step();
+    this.chicagoLanes.tick();
 
     if (this.ball.position.y < this.drainBelowY) {
       this.bus.emit({ type: 'ballDrained' });
@@ -290,6 +303,7 @@ export class Game {
     this.plunger.update();
     for (const b of this.bumpers) b.update();
     for (const s of this.slingshots) s.update();
+    this.chicagoLanes.syncRender();
     this.hud.update();
     this.debug.update(this.world);
     this.renderer.render(this.scene, this.camera);
