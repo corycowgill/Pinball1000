@@ -1,18 +1,19 @@
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
 import { Renderer } from '../render/Renderer';
 import { Loop } from './Loop';
 import { Input } from './Input';
 import { World } from '../physics/World';
 import { PhysicsDebug } from '../physics/Debug';
-import { Materials } from '../physics/Materials';
+import { Playfield } from '../table/Playfield';
+import { Ball } from '../table/elements/Ball';
+import { TABLE, COLORS, Z_BOTTOM } from '../table/layout';
 
 /**
- * Top-level orchestrator. Owns the renderer, input, fixed-step loop,
- * physics world, and (later) the table and game state machine.
+ * Top-level orchestrator. Owns renderer, input, fixed-step loop, physics
+ * world, the table, and (in later chunks) the game state machine.
  *
- * Chunk 2: ball drops onto a tilted plane. Verifies Rapier integration,
- * fixed-step timing, mesh-body sync, and the debug overlay.
+ * Chunk 3: full tilted playfield with perimeter walls and drain guides;
+ * ball spawns above the plunger lane and rolls toward the drain.
  */
 export class Game {
   private readonly canvas: HTMLCanvasElement;
@@ -24,27 +25,24 @@ export class Game {
 
   private world!: World;
   private debug!: PhysicsDebug;
+  private playfield!: Playfield;
+  private ball!: Ball;
 
-  private ballBody: RAPIER.RigidBody | null = null;
-  private ballMesh: THREE.Mesh | null = null;
-  private prevBallPos = new THREE.Vector3();
-  private currBallPos = new THREE.Vector3();
+  private drainBelowY!: number;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.renderer = new Renderer(canvas);
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b162a);
-    this.scene.fog = new THREE.Fog(0x0b162a, 4, 14);
+    this.scene.background = new THREE.Color(0x05070a);
+    this.scene.fog = new THREE.Fog(0x05070a, 3.5, 10);
 
     this.camera = new THREE.PerspectiveCamera(
-      45,
+      40,
       window.innerWidth / window.innerHeight,
       0.05,
-      50,
+      40,
     );
-    this.camera.position.set(0, 1.4, 2.6);
-    this.camera.lookAt(0, 0.4, 0);
 
     this.input = new Input();
     this.loop = new Loop({
@@ -61,7 +59,17 @@ export class Game {
     await World.init();
     this.world = new World();
     this.debug = new PhysicsDebug(this.scene);
-    this.buildScene();
+
+    this.buildLighting();
+    this.playfield = new Playfield(this.scene, this.world);
+    this.ball = new Ball(this.scene, this.world, this.playfield.ballSpawnWorld);
+
+    this.positionCamera();
+    // Drain threshold: a generous margin below the playfield's lowest world Y.
+    const drainProbe = new THREE.Vector3();
+    this.playfield.localToWorld(0, 0, Z_BOTTOM, drainProbe);
+    this.drainBelowY = drainProbe.y - 0.25;
+
     this.handleResize();
   }
 
@@ -70,7 +78,7 @@ export class Game {
     this.input.on((action, type) => {
       if (type !== 'down') return;
       if (action === 'debugToggle') this.debug.toggle();
-      if (action === 'launch') this.respawnBall();
+      if (action === 'launch') this.ball.respawn(this.playfield.ballSpawnWorld);
     });
     this.loop.start();
   }
@@ -80,118 +88,55 @@ export class Game {
     this.input.detach();
   }
 
-  private buildScene(): void {
-    // Lighting (placeholder).
-    const key = new THREE.DirectionalLight(0xfff2c8, 1.4);
+  private buildLighting(): void {
+    const key = new THREE.DirectionalLight(0xfff2c8, 1.6);
     key.position.set(2, 4, 2);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.near = 0.1;
+    key.shadow.camera.far = 10;
+    key.shadow.camera.left = -2;
+    key.shadow.camera.right = 2;
+    key.shadow.camera.top = 2;
+    key.shadow.camera.bottom = -2;
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.5);
+
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.55);
     fill.position.set(-2, 1, -1);
     this.scene.add(fill);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x222244, 0.4));
 
-    // Tilted "playfield" — temporary green slab. Real table arrives in chunk 3.
-    const tilt = THREE.MathUtils.degToRad(6.5);
-    const fieldGeom = new THREE.BoxGeometry(1.2, 0.04, 2.0);
-    const fieldMat = new THREE.MeshStandardMaterial({
-      color: 0x1d4f2a,
-      roughness: 0.85,
-      metalness: 0.05,
-    });
-    const fieldMesh = new THREE.Mesh(fieldGeom, fieldMat);
-    fieldMesh.rotation.x = -tilt;
-    fieldMesh.position.set(0, 0, 0);
-    this.scene.add(fieldMesh);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.7);
+    rim.position.set(0, 2, -3);
+    this.scene.add(rim);
 
-    // Static collider matching the playfield slab.
-    const fieldBodyDesc = RAPIER.RigidBodyDesc.fixed()
-      .setTranslation(0, 0, 0)
-      .setRotation({ x: Math.sin(-tilt / 2), y: 0, z: 0, w: Math.cos(-tilt / 2) });
-    const fieldBody = this.world.raw.createRigidBody(fieldBodyDesc);
-    const fieldColDesc = RAPIER.ColliderDesc.cuboid(0.6, 0.02, 1.0)
-      .setFriction(Materials.playfield.friction)
-      .setRestitution(Materials.playfield.restitution);
-    this.world.raw.createCollider(fieldColDesc, fieldBody);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x222244, 0.45));
 
-    // Drain catcher — invisible static below the playfield's low edge.
-    const catcherDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1.5, 0);
-    const catcherBody = this.world.raw.createRigidBody(catcherDesc);
-    this.world.raw.createCollider(
-      RAPIER.ColliderDesc.cuboid(3, 0.05, 3),
-      catcherBody,
-    );
-
-    // The ball.
-    this.spawnBall();
+    // Halo ground glow under the table — Bears orange.
+    const halo = new THREE.PointLight(COLORS.bearsOrange, 1.5, 4);
+    halo.position.set(0, -0.4, 0.5);
+    this.scene.add(halo);
   }
 
-  private spawnBall(): void {
-    const radius = 0.027; // slightly larger than real for visibility at this scale
-    const startY = 0.6;
-    const startZ = -0.7;
-
-    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(0, startY, startZ)
-      .setLinearDamping(Materials.ball.linearDamping)
-      .setAngularDamping(Materials.ball.angularDamping)
-      .setCcdEnabled(true);
-    const body = this.world.raw.createRigidBody(bodyDesc);
-    const colDesc = RAPIER.ColliderDesc.ball(radius)
-      .setDensity(Materials.ball.density)
-      .setFriction(Materials.ball.friction)
-      .setRestitution(Materials.ball.restitution);
-    this.world.raw.createCollider(colDesc, body);
-    this.ballBody = body;
-
-    // Mesh — chrome-ish steel pinball.
-    const geom = new THREE.SphereGeometry(radius, 24, 16);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xe6ecf2,
-      roughness: 0.18,
-      metalness: 0.92,
-    });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.castShadow = true;
-    this.scene.add(mesh);
-    this.ballMesh = mesh;
-
-    this.prevBallPos.set(0, startY, startZ);
-    this.currBallPos.copy(this.prevBallPos);
-  }
-
-  private respawnBall(): void {
-    if (!this.ballBody) return;
-    this.ballBody.setTranslation({ x: 0, y: 0.6, z: -0.7 }, true);
-    this.ballBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    this.ballBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  private positionCamera(): void {
+    // Look down the table from the player's chest. Slight perspective so
+    // the top of the playfield reads as further away.
+    const fromY = TABLE.depth * 0.65;
+    const fromZ = Z_BOTTOM + 0.45;
+    this.camera.position.set(0, fromY, fromZ);
+    this.camera.lookAt(0, 0, -TABLE.depth * 0.05);
   }
 
   private fixedUpdate(_dt: number): void {
-    if (!this.world || !this.ballBody) return;
-
-    // Track previous position for render interpolation.
-    const t = this.ballBody.translation();
-    this.prevBallPos.copy(this.currBallPos);
-    this.currBallPos.set(t.x, t.y, t.z);
-
+    this.ball.cachePrev();
     this.world.step();
 
-    // Drain detection: if the ball falls below the catcher, respawn.
-    if (this.currBallPos.y < -1.0) {
-      this.respawnBall();
-      const r = this.ballBody.translation();
-      this.prevBallPos.set(r.x, r.y, r.z);
-      this.currBallPos.copy(this.prevBallPos);
+    if (this.ball.position.y < this.drainBelowY) {
+      this.ball.respawn(this.playfield.ballSpawnWorld);
     }
   }
 
   private render(alpha: number): void {
-    if (this.ballMesh && this.ballBody) {
-      // Interpolate render position between the last two physics steps.
-      this.ballMesh.position.lerpVectors(this.prevBallPos, this.currBallPos, alpha);
-      const r = this.ballBody.rotation();
-      this.ballMesh.quaternion.set(r.x, r.y, r.z, r.w);
-    }
+    this.ball.syncRender(alpha);
     this.debug.update(this.world);
     this.renderer.render(this.scene, this.camera);
   }
