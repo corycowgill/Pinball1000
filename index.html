@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <title>Chicago Pinball</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+      <div id="hud">
+        <div id="hud-score">
+          <div class="hud-label">SCORE</div>
+          <div id="score-value">0</div>
+        </div>
+        <div id="hud-mode">
+          <div class="hud-label">MODE</div>
+          <div id="mode-value">ATTRACT</div>
+        </div>
+        <div id="hud-balls">
+          <div class="hud-label">BALL</div>
+          <div id="ball-value">1 / 3</div>
+        </div>
+        <div id="hud-multiplier">
+          <div class="hud-label">MULT</div>
+          <div id="mult-value">1x</div>
+        </div>
+      </div>
+      <div id="callouts"></div>
+      <div id="loader"><div class="loader-text">LOADING THE WINDY CITY&hellip;</div></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
