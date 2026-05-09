@@ -6,14 +6,15 @@ import { World } from '../physics/World';
 import { PhysicsDebug } from '../physics/Debug';
 import { Playfield } from '../table/Playfield';
 import { Ball } from '../table/elements/Ball';
-import { TABLE, COLORS, Z_BOTTOM } from '../table/layout';
+import { Flipper, FLIPPER_DIMENSIONS, FLIPPER_COLORS } from '../table/elements/Flipper';
+import { Plunger } from '../table/elements/Plunger';
+import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 
 /**
  * Top-level orchestrator. Owns renderer, input, fixed-step loop, physics
- * world, the table, and (in later chunks) the game state machine.
+ * world, the table, ball, flippers, plunger, and (later) state machine.
  *
- * Chunk 3: full tilted playfield with perimeter walls and drain guides;
- * ball spawns above the plunger lane and rolls toward the drain.
+ * Chunk 4: flippers (revolute joint with motor) + plunger.
  */
 export class Game {
   private readonly canvas: HTMLCanvasElement;
@@ -27,6 +28,9 @@ export class Game {
   private debug!: PhysicsDebug;
   private playfield!: Playfield;
   private ball!: Ball;
+  private flipperLeft!: Flipper;
+  private flipperRight!: Flipper;
+  private plunger!: Plunger;
 
   private drainBelowY!: number;
 
@@ -62,10 +66,13 @@ export class Game {
 
     this.buildLighting();
     this.playfield = new Playfield(this.scene, this.world);
+
+    this.buildFlippers();
+    this.buildPlunger();
+
     this.ball = new Ball(this.scene, this.world, this.playfield.ballSpawnWorld);
 
     this.positionCamera();
-    // Drain threshold: a generous margin below the playfield's lowest world Y.
     const drainProbe = new THREE.Vector3();
     this.playfield.localToWorld(0, 0, Z_BOTTOM, drainProbe);
     this.drainBelowY = drainProbe.y - 0.25;
@@ -76,6 +83,21 @@ export class Game {
   start(): void {
     this.input.attach();
     this.input.on((action, type) => {
+      if (action === 'flipperLeft') {
+        if (type === 'down') this.flipperLeft.press();
+        else this.flipperLeft.release();
+        return;
+      }
+      if (action === 'flipperRight') {
+        if (type === 'down') this.flipperRight.press();
+        else this.flipperRight.release();
+        return;
+      }
+      if (action === 'plunger') {
+        if (type === 'down') this.plunger.startCharge();
+        else this.plunger.release(this.ball);
+        return;
+      }
       if (type !== 'down') return;
       if (action === 'debugToggle') this.debug.toggle();
       if (action === 'launch') this.ball.respawn(this.playfield.ballSpawnWorld);
@@ -111,15 +133,44 @@ export class Game {
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x222244, 0.45));
 
-    // Halo ground glow under the table — Bears orange.
     const halo = new THREE.PointLight(COLORS.bearsOrange, 1.5, 4);
     halo.position.set(0, -0.4, 0.5);
     this.scene.add(halo);
   }
 
+  private buildFlippers(): void {
+    const yLocal = TABLE.wallHeight * 0.45;
+    this.flipperLeft = new Flipper(this.world, {
+      pivotLocal: new THREE.Vector3(ELEMENTS.flipperLeft.x, yLocal, ELEMENTS.flipperLeft.z),
+      length: FLIPPER_DIMENSIONS.length,
+      thickness: FLIPPER_DIMENSIONS.thickness,
+      restAngle: ELEMENTS.flipperLeft.restAngle,
+      raisedAngle: ELEMENTS.flipperLeft.raisedAngle,
+      color: FLIPPER_COLORS.left,
+      isLeft: true,
+      meshParent: this.playfield.tiltedRoot,
+    });
+    this.flipperRight = new Flipper(this.world, {
+      pivotLocal: new THREE.Vector3(ELEMENTS.flipperRight.x, yLocal, ELEMENTS.flipperRight.z),
+      length: FLIPPER_DIMENSIONS.length,
+      thickness: FLIPPER_DIMENSIONS.thickness,
+      restAngle: ELEMENTS.flipperRight.restAngle,
+      raisedAngle: ELEMENTS.flipperRight.raisedAngle,
+      color: FLIPPER_COLORS.right,
+      isLeft: false,
+      meshParent: this.playfield.tiltedRoot,
+    });
+  }
+
+  private buildPlunger(): void {
+    const baseLocal = new THREE.Vector3(ELEMENTS.plunger.x, TABLE.wallHeight * 0.4, ELEMENTS.plunger.z);
+    const baseWorld = this.playfield.tiltedRoot.localToWorld(baseLocal.clone());
+    // Fire direction: -Z in playfield space (up the lane), transformed to world.
+    const fireWorld = new THREE.Vector3(0, 0, -1).transformDirection(this.playfield.tiltedRoot.matrixWorld);
+    this.plunger = new Plunger(this.scene, baseWorld, fireWorld);
+  }
+
   private positionCamera(): void {
-    // Look down the table from the player's chest. Slight perspective so
-    // the top of the playfield reads as further away.
     const fromY = TABLE.depth * 0.65;
     const fromZ = Z_BOTTOM + 0.45;
     this.camera.position.set(0, fromY, fromZ);
@@ -128,6 +179,8 @@ export class Game {
 
   private fixedUpdate(_dt: number): void {
     this.ball.cachePrev();
+    this.flipperLeft.cachePrev();
+    this.flipperRight.cachePrev();
     this.world.step();
 
     if (this.ball.position.y < this.drainBelowY) {
@@ -137,6 +190,9 @@ export class Game {
 
   private render(alpha: number): void {
     this.ball.syncRender(alpha);
+    this.flipperLeft.syncRender(alpha);
+    this.flipperRight.syncRender(alpha);
+    this.plunger.update();
     this.debug.update(this.world);
     this.renderer.render(this.scene, this.camera);
   }
