@@ -20,6 +20,7 @@ import { TeamTarget } from '../table/elements/TeamTarget';
 import { ModeManager } from '../game/Modes/TeamMode';
 import { Bean } from '../table/elements/Bean';
 import { SueHead } from '../table/elements/SueHead';
+import { SueMiniGame } from '../game/Modes/SueMiniGame';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -59,6 +60,7 @@ export class Game {
   private teamTargetByHandle = new Map<number, TeamTarget>();
   private bean!: Bean;
   private sueHead!: SueHead;
+  private sueMiniGame!: SueMiniGame;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -133,6 +135,7 @@ export class Game {
     this.buildTeamTargets();
     this.bean = new Bean(this.world, this.bus, this.ball, this.playfield.tiltedRoot, this.renderer.raw);
     this.sueHead = new SueHead(this.world, this.bus, this.ball, this.playfield.tiltedRoot);
+    this.sueMiniGame = new SueMiniGame(this.bus, this.scoring, this.sueHead, this.ball, this.playfield);
 
     // Open Sue's jaw on every CHICAGO spell — gives the player a visible
     // reward and a window to feed her. Auto-close after 8 seconds if the
