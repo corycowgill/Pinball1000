@@ -11,6 +11,9 @@ import { Plunger } from '../table/elements/Plunger';
 import { Bumper } from '../table/elements/Bumper';
 import { Slingshot } from '../table/elements/Slingshot';
 import { ChicagoLanes } from '../table/elements/ChicagoLanes';
+import { Ramp } from '../table/elements/Ramp';
+import { buildLTrainLoop } from '../table/elements/LTrainLoop';
+import { buildCubsRamp } from '../table/elements/CubsRamp';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -43,6 +46,7 @@ export class Game {
   private bumpers: Bumper[] = [];
   private slingshots: Slingshot[] = [];
   private chicagoLanes!: ChicagoLanes;
+  private ramps: Ramp[] = [];
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -104,6 +108,10 @@ export class Game {
       this.chicagoBonus,
       this.playfield.tiltedRoot,
     );
+
+    // Ramps + L-train loop.
+    this.ramps.push(buildLTrainLoop(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
+    this.ramps.push(buildCubsRamp(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -292,6 +300,7 @@ export class Game {
     this.flipperRight.cachePrev();
     this.world.step();
     this.chicagoLanes.tick();
+    for (const ramp of this.ramps) ramp.tick();
 
     if (this.ball.position.y < this.drainBelowY) {
       this.bus.emit({ type: 'ballDrained' });
