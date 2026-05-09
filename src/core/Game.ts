@@ -115,6 +115,9 @@ export class Game {
     this.hud.setBall(1, 3);
     this.callouts = new ComicCallouts(this.bus, this.camera, this.canvas);
 
+    // Now that the scene + camera exist, attach the post-processing chain.
+    this.renderer.attach(this.scene, this.camera);
+
     this.wireContactHandlers();
     this.handleResize();
   }
