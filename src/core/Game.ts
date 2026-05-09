@@ -14,6 +14,8 @@ import { ChicagoLanes } from '../table/elements/ChicagoLanes';
 import { Ramp } from '../table/elements/Ramp';
 import { buildLTrainLoop } from '../table/elements/LTrainLoop';
 import { buildCubsRamp } from '../table/elements/CubsRamp';
+import { DropTarget, DropTargetBank } from '../table/elements/DropTarget';
+import { Spinner } from '../table/elements/Spinner';
 import { TABLE, COLORS, Z_BOTTOM, ELEMENTS } from '../table/layout';
 import { EventBus } from '../game/Events';
 import { Scoring } from '../game/Scoring';
@@ -47,6 +49,8 @@ export class Game {
   private slingshots: Slingshot[] = [];
   private chicagoLanes!: ChicagoLanes;
   private ramps: Ramp[] = [];
+  private dropBank!: DropTargetBank;
+  private spinner!: Spinner;
 
   private bus!: EventBus;
   private scoring!: Scoring;
@@ -112,6 +116,10 @@ export class Game {
     // Ramps + L-train loop.
     this.ramps.push(buildLTrainLoop(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
     this.ramps.push(buildCubsRamp(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
+
+    // White Sox drop target bank + Hawks spinner.
+    this.buildDropBank();
+    this.buildSpinner();
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -240,6 +248,27 @@ export class Game {
     }
   }
 
+  private buildDropBank(): void {
+    const targets: DropTarget[] = [];
+    for (let i = 0; i < ELEMENTS.soxDropTargets.length; i++) {
+      const cfg = ELEMENTS.soxDropTargets[i]!;
+      targets.push(
+        new DropTarget(this.world, this.bus, this.playfield.tiltedRoot, cfg.x, cfg.z, i, COLORS.soxBlack),
+      );
+    }
+    this.dropBank = new DropTargetBank(targets, this.bus);
+  }
+
+  private buildSpinner(): void {
+    this.spinner = new Spinner(
+      this.world,
+      this.bus,
+      this.playfield.tiltedRoot,
+      ELEMENTS.hawksSpinner.x,
+      ELEMENTS.hawksSpinner.z,
+    );
+  }
+
   private buildSlingshots(): void {
     const left = new Slingshot(
       this.world,
@@ -284,6 +313,11 @@ export class Game {
         sling.onHit();
         return;
       }
+      const drop = this.dropBank.byHandle.get(other.handle);
+      if (drop) {
+        drop.onHit();
+        return;
+      }
     });
   }
 
@@ -298,6 +332,7 @@ export class Game {
     this.ball.cachePrev();
     this.flipperLeft.cachePrev();
     this.flipperRight.cachePrev();
+    this.spinner.cachePrev();
     this.world.step();
     this.chicagoLanes.tick();
     for (const ramp of this.ramps) ramp.tick();
@@ -315,6 +350,8 @@ export class Game {
     this.plunger.update();
     for (const b of this.bumpers) b.update();
     for (const s of this.slingshots) s.update();
+    for (const t of this.dropBank.targets) t.update();
+    this.spinner.syncRender(alpha);
     this.chicagoLanes.syncRender();
     this.hud.update();
     this.debug.update(this.world);
