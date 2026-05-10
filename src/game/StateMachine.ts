@@ -27,7 +27,7 @@ export interface GameContext {
   scoring: Scoring;
   chicagoBonus: ChicagoBonus;
   modeManager: ModeManager;
-  sueMiniGame: SueMiniGame;
+  sueMiniGame: SueMiniGame | null;
 }
 
 export class StateMachine {
@@ -72,7 +72,7 @@ export class StateMachine {
   }
 
   private onDrain(): void {
-    if (this.ctx.sueMiniGame.isActive) return; // capture-related drain isn't a real drain
+    if (this.ctx.sueMiniGame?.isActive) return; // capture-related drain isn't a real drain
     if (this._state !== 'ballInPlay' && this._state !== 'ballReady') return;
 
     if (this.pendingExtraBall) {

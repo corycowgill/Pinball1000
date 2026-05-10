@@ -65,8 +65,8 @@ export class Game {
   private teamTargets: TeamTarget[] = [];
   private teamTargetByHandle = new Map<number, TeamTarget>();
   private bean!: Bean;
-  private sueHead!: SueHead;
-  private sueMiniGame!: SueMiniGame;
+  private sueHead: SueHead | null = null;
+  private sueMiniGame: SueMiniGame | null = null;
   private stateMachine!: StateMachine;
   private overlayDismiss: (() => void) | null = null;
   private audio!: AudioBus;
@@ -139,25 +139,22 @@ export class Game {
       this.playfield.tiltedRoot,
     );
 
-    // Ramps + L-train loop.
-    this.ramps.push(buildLTrainLoop(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
-    this.ramps.push(buildCubsRamp(this.world, this.bus, this.ball, this.playfield.tiltedRoot));
-
     // White Sox drop target bank + Hawks spinner.
     this.buildDropBank();
     this.buildSpinner();
     this.buildTeamTargets();
     this.bean = new Bean(this.world, this.bus, this.ball, this.playfield.tiltedRoot, this.renderer.raw);
-    this.sueHead = new SueHead(this.world, this.bus, this.ball, this.playfield.tiltedRoot);
-    this.sueMiniGame = new SueMiniGame(this.bus, this.scoring, this.sueHead, this.ball, this.playfield);
 
-    // Open Sue's jaw on every CHICAGO spell — gives the player a visible
-    // reward and a window to feed her. Auto-close after 8 seconds if the
-    // ball never makes it in.
-    this.bus.on('chicagoSpelled', () => {
-      this.sueHead.openJaw();
-      setTimeout(() => this.sueHead.closeJaw(), 8000);
-    });
+    // Sue's head, the L-train loop, and the Cubs ramp are temporarily
+    // disabled — they all live in the upper-right area and were piling on
+    // top of each other, creating a tangle of geometry the ball got stuck
+    // in. Get the basic playfield (flippers, bumpers, slings, lanes,
+    // targets, drops, spinner, Bean) feeling solid first, then bring
+    // these back one at a time with re-tuned positions.
+    void buildLTrainLoop;
+    void buildCubsRamp;
+    void SueHead;
+    void SueMiniGame;
 
     this.positionCamera();
     const drainProbe = new THREE.Vector3();
@@ -480,9 +477,10 @@ export class Game {
   }
 
   private positionCamera(): void {
-    const fromY = TABLE.depth * 0.65;
-    const fromZ = Z_BOTTOM + 0.45;
-    this.camera.position.set(0, fromY, fromZ);
+    // Initial pose — handleResize() refines it once we know the actual
+    // viewport aspect ratio. Keeping this stub avoids a null-camera
+    // window during construction.
+    this.camera.position.set(0, TABLE.depth * 0.65, Z_BOTTOM + 0.45);
     this.camera.lookAt(0, 0, -TABLE.depth * 0.05);
   }
 
@@ -494,7 +492,7 @@ export class Game {
     this.world.step();
     this.chicagoLanes.tick();
     for (const ramp of this.ramps) ramp.tick();
-    this.sueHead.tick();
+    this.sueHead?.tick();
 
     // Drain detection — emit once per drain. The state machine's bonus-count
     // -> ballReady transition is what re-spawns and re-enables the ball.
@@ -535,19 +533,21 @@ export class Game {
     const aspect = w / h;
     this.camera.aspect = aspect;
 
-    // Pull the camera back on narrow / portrait screens so the whole table
-    // stays in frame. FOV is the vertical angle in three.js, so a tall
-    // viewport already shows a generous slice of Z; we just need more X
-    // breathing room horizontally on phones.
     if (aspect < 1.0) {
-      // Portrait: scale framing distance by 1/aspect so the table width fits.
-      const fromY = TABLE.depth * 0.65 * (1 / Math.max(aspect, 0.5));
-      const fromZ = Z_BOTTOM + 0.45 + (1 - aspect) * 0.4;
-      this.camera.position.set(0, fromY, fromZ);
+      // Portrait phone: classic pinball-cabinet view. Lower angle, FOV
+      // bumped up so the full 2.2m table depth fits in the tall viewport.
+      // Camera sits behind+above the player position, looking forward
+      // and slightly down — reads as "playing pinball" rather than
+      // "top-down map".
+      this.camera.fov = 55;
+      this.camera.position.set(0, 0.85, Z_BOTTOM + 0.95);
+      this.camera.lookAt(0, 0.05, -0.2);
     } else {
+      // Desktop / landscape — original framing.
+      this.camera.fov = 40;
       this.camera.position.set(0, TABLE.depth * 0.65, Z_BOTTOM + 0.45);
+      this.camera.lookAt(0, 0, -TABLE.depth * 0.05);
     }
-    this.camera.lookAt(0, 0, -TABLE.depth * 0.05);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   }

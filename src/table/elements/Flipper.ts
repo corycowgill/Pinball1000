@@ -33,11 +33,20 @@ export interface FlipperOptions {
   meshParent: THREE.Object3D;
 }
 
+/** Angular velocity (rad/s) when flipper is pressed — fast, ~30 rad/s sweeps
+ *  the ~1-radian arc in 33ms which is real-pinball-snappy. */
+const FLIPPER_PRESS_VEL = 30;
+/** Slower retract so the bat doesn't slam back. */
+const FLIPPER_REST_VEL = 18;
+/** Motor damping factor — higher = stiffer hold against ball impact. */
+const FLIPPER_DAMPING = 1.5;
+
 export class Flipper {
   readonly body: RAPIER.RigidBody;
   readonly mesh: THREE.Mesh;
   readonly joint: RAPIER.ImpulseJoint;
   private readonly opts: FlipperOptions;
+  private pressDir: number = 1;
   private prevQuat = new THREE.Quaternion();
   private currQuat = new THREE.Quaternion();
   private prevPos = new THREE.Vector3();
@@ -108,12 +117,21 @@ export class Flipper {
     this.joint = joint;
 
     // 7) Configure motor + limits. Limits use the joint's local axis frame.
+    // We use VELOCITY-mode rather than position-mode: when a flipper is
+    // pressed, drive the bat at high angular velocity toward the raised
+    // limit, and on release drive the opposite direction. The joint
+    // limits stop the bat at the extremes — the same as a real pinball
+    // flipper coil. Position-mode worked but felt mushy under load.
     const revolute = joint as RAPIER.RevoluteImpulseJoint;
     const lo = Math.min(opts.restAngle, opts.raisedAngle);
     const hi = Math.max(opts.restAngle, opts.raisedAngle);
     revolute.setLimits(lo, hi);
-    // Resting-state motor: park at restAngle.
-    revolute.configureMotorPosition(opts.restAngle, 8000, 200);
+    // Direction the flipper sweeps when pressed (raisedAngle - restAngle):
+    // left flipper has restAngle<raisedAngle (sweeps positive), right has
+    // restAngle>raisedAngle (sweeps negative).
+    this.pressDir = Math.sign(opts.raisedAngle - opts.restAngle);
+    // Park at rest with a strong opposing velocity.
+    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_DAMPING);
 
     const tInit = this.body.translation();
     this.prevPos.set(tInit.x, tInit.y, tInit.z);
@@ -124,12 +142,14 @@ export class Flipper {
 
   press(): void {
     const revolute = this.joint as RAPIER.RevoluteImpulseJoint;
-    revolute.configureMotorPosition(this.opts.raisedAngle, 8000, 200);
+    // Drive bat toward raised limit. The limit stops it cleanly.
+    revolute.configureMotorVelocity(this.pressDir * FLIPPER_PRESS_VEL, FLIPPER_DAMPING);
   }
 
   release(): void {
     const revolute = this.joint as RAPIER.RevoluteImpulseJoint;
-    revolute.configureMotorPosition(this.opts.restAngle, 8000, 200);
+    // Drive back toward rest limit (slower than press for natural feel).
+    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_DAMPING);
   }
 
   cachePrev(): void {

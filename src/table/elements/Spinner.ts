@@ -105,15 +105,19 @@ export class Spinner {
     this.currQuat.set(r.x, r.y, r.z, r.w);
 
     // Integrate angular velocity along the joint axis to count rotations.
-    // dt is fixed-step (1/240); we approximate with a constant.
+    // Deadzone of 1 rad/s suppresses numerical-noise oscillation that was
+    // accumulating into "phantom" rotations (and triggering Hat Trick mode
+    // before the player even launched the ball).
     const angVel = this.bladeBody.angvel();
     const angVelAlongAxis =
       angVel.x * this.axisWorld.x + angVel.y * this.axisWorld.y + angVel.z * this.axisWorld.z;
-    this.accumulatedAngle += Math.abs(angVelAlongAxis) * (1 / 240);
-    while (this.accumulatedAngle >= Math.PI * 2) {
-      this.accumulatedAngle -= Math.PI * 2;
-      this.rotationCount += 1;
-      this.bus.emit({ type: 'spinnerRotation', count: this.rotationCount });
+    if (Math.abs(angVelAlongAxis) > 1.0) {
+      this.accumulatedAngle += Math.abs(angVelAlongAxis) * (1 / 240);
+      while (this.accumulatedAngle >= Math.PI * 2) {
+        this.accumulatedAngle -= Math.PI * 2;
+        this.rotationCount += 1;
+        this.bus.emit({ type: 'spinnerRotation', count: this.rotationCount });
+      }
     }
   }
 
