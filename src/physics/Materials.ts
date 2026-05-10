@@ -8,7 +8,11 @@
  */
 export const Materials = {
   ball: {
-    density: 7850, // steel-ish (kg/m^3); collider scaling controls effective mass.
+    // Tuned to ~80g actual mass at our 0.027m visual radius:
+    //   m = density * (4/3)*pi*r^3 = 1000 * 8.24e-5 = 0.082 kg
+    // Steel density (7850) at this radius gives 0.65kg, ~8x a real pinball,
+    // which made flippers/bumpers/plunger feel completely dead.
+    density: 1000,
     friction: 0.05,
     restitution: 0.25,
     linearDamping: 0.12,

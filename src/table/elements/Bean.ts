@@ -78,7 +78,7 @@ export class Bean {
       ballT.z - this.worldPos.z,
     );
     if (dir.lengthSq() < 1e-5) dir.set(0, 0.05, 1);
-    dir.normalize().multiplyScalar(0.06);
+    dir.normalize().multiplyScalar(0.012);
     this.ball.body.applyImpulse({ x: dir.x, y: dir.y, z: dir.z }, true);
     this.bus.emit({ type: 'beanKick' });
   }

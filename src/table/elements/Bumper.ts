@@ -88,13 +88,14 @@ export class Bumper {
       // Ball directly above — give a small forward kick.
       this.outwardWorld.set(0, 0, 1);
     }
-    // Tuned: 0.22 = pop you can feel from any angle but not so hot it jumps
-    // out of the bumper triangle. Y bump keeps the ball on the deck.
-    const popStrength = 0.22;
+    // Tuned for ~80g ball: 0.04 N·s -> ~0.5 m/s outward velocity change
+    // on top of the ball's incoming bounce. Snappy without launching the
+    // ball off the playfield.
+    const popStrength = 0.045;
     this.ball.body.applyImpulse(
       {
         x: this.outwardWorld.x * popStrength,
-        y: 0.05,
+        y: 0.012,
         z: this.outwardWorld.z * popStrength,
       },
       true,

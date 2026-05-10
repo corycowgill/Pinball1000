@@ -103,12 +103,29 @@ export class Playfield {
       new THREE.Vector3(TABLE.width / 2 + TABLE.wallThickness, TABLE.wallHeight / 2, TABLE.wallThickness / 2),
       wallMat,
     );
-    // Plunger-lane divider — vertical wall separating the launch lane from the playfield.
+    // Plunger-lane divider — vertical wall separating the launch lane from
+    // the playfield. Stops short of the top so the ball can exit into the
+    // main playfield.
+    const dividerHalfLen = (TABLE.depth / 2 - 0.18); // shorter at top
+    const dividerCenterZ = (Z_BOTTOM - dividerHalfLen) - 0.01;
     this.addWall(
-      new THREE.Vector3(X_RIGHT - 0.12, wallY, 0.0),
-      new THREE.Vector3(0.012, TABLE.wallHeight / 2, TABLE.depth / 2 - 0.05),
+      new THREE.Vector3(X_RIGHT - 0.12, wallY, dividerCenterZ),
+      new THREE.Vector3(0.012, TABLE.wallHeight / 2, dividerHalfLen),
       wallMat,
     );
+
+    // Kicker rail at the TOP of the plunger lane — angled so a ball flying
+    // up the lane bounces off into the playfield instead of straight back
+    // down. This is the classic "ball arch" you see at the top of every
+    // pinball table's plunger lane.
+    const kickerMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, TABLE.wallHeight, 0.018),
+      wallMat,
+    );
+    kickerMesh.position.set(X_RIGHT - 0.10, wallY, Z_TOP + 0.10);
+    kickerMesh.rotation.y = Math.PI / 4; // 45° — redirects -Z motion into -X
+    this.tiltedRoot.add(kickerMesh);
+    this.colliderForBox(kickerMesh, 0.11, TABLE.wallHeight / 2, 0.009, Materials.wall);
   }
 
   /**

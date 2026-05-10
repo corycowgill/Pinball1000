@@ -21,8 +21,14 @@ export class Plunger {
   private charging = false;
   private charge = 0; // 0..1
   private readonly maxPullBack = 0.08;
-  private readonly maxChargeMs = 1200;
+  private readonly maxChargeMs = 1000;
+  // Tuned for ~80g ball + 6.5° tilt + drag:
+  //   v_at_max = 0.32 / 0.08 = 4 m/s
+  // Plenty to climb the 2.2m lane and dump into the playfield.
   private readonly maxImpulse = 0.32;
+  // Minimum impulse so a quick tap still launches the ball at least into the
+  // playfield (otherwise a tap reads as 0 charge -> no launch).
+  private readonly minImpulse = 0.18;
 
   /** World direction the plunger fires. Set by Playfield (up the lane). */
   readonly fireDirWorld = new THREE.Vector3();
@@ -71,12 +77,12 @@ export class Plunger {
     this.charging = false;
     const elapsed = performance.now() - this.chargeStart;
     this.charge = Math.min(1, elapsed / this.maxChargeMs);
-    const impulseMag = this.charge * this.maxImpulse;
-    if (impulseMag <= 0.001) {
-      this.charge = 0;
-      this.updateHead();
-      return false;
-    }
+    // Floor at minImpulse — even a quick tap should launch the ball.
+    const impulseMag = this.minImpulse + this.charge * (this.maxImpulse - this.minImpulse);
+    // Wake the body and clear residual velocity so the impulse alone
+    // determines launch speed (avoids momentum from drift / deck contact).
+    ball.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    ball.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     const impulse = this.fireDirWorld.clone().multiplyScalar(impulseMag);
     ball.body.applyImpulse({ x: impulse.x, y: impulse.y, z: impulse.z }, true);
     this.charge = 0;
