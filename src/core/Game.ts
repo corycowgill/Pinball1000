@@ -534,14 +534,17 @@ export class Game {
     this.camera.aspect = aspect;
 
     if (aspect < 1.0) {
-      // Portrait phone: classic pinball-cabinet view. Lower angle, FOV
-      // bumped up so the full 2.2m table depth fits in the tall viewport.
-      // Camera sits behind+above the player position, looking forward
-      // and slightly down — reads as "playing pinball" rather than
-      // "top-down map".
-      this.camera.fov = 55;
-      this.camera.position.set(0, 0.85, Z_BOTTOM + 0.95);
-      this.camera.lookAt(0, 0.05, -0.2);
+      // Portrait phone: near-top-down view with a small tilt for depth cues.
+      // The table is 1.10m wide x 2.20m deep; with a tall narrow viewport
+      // we can't do a low cabinet angle (the table reads as a thin slice),
+      // so we frame from above looking slightly toward the player.
+      // Camera at (0, 2.5, 0.7), looking at (0, 0, -0.1):
+      //   distance ~2.6m, ~17 deg from straight down.
+      // FOV 50 + aspect ~0.46 -> visible: 2.4m vertical, 1.1m horizontal,
+      // exactly fitting the 2.2m x 1.10m table with breathing room.
+      this.camera.fov = 50;
+      this.camera.position.set(0, 2.5, 0.7);
+      this.camera.lookAt(0, 0, -0.1);
     } else {
       // Desktop / landscape — original framing.
       this.camera.fov = 40;

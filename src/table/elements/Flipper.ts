@@ -38,8 +38,11 @@ export interface FlipperOptions {
 const FLIPPER_PRESS_VEL = 30;
 /** Slower retract so the bat doesn't slam back. */
 const FLIPPER_REST_VEL = 18;
-/** Motor damping factor — higher = stiffer hold against ball impact. */
-const FLIPPER_DAMPING = 1.5;
+/** Motor factor — Rapier's configureMotorVelocity gain. Real pinball
+ *  flippers are coil-driven and instantly torque-saturated; we want a high
+ *  factor so the bat reaches target velocity within one step. Values
+ *  below ~100 leave the motor too weak to overcome ball impact. */
+const FLIPPER_MOTOR_FACTOR = 1000;
 
 export class Flipper {
   readonly body: RAPIER.RigidBody;
@@ -131,7 +134,7 @@ export class Flipper {
     // restAngle>raisedAngle (sweeps negative).
     this.pressDir = Math.sign(opts.raisedAngle - opts.restAngle);
     // Park at rest with a strong opposing velocity.
-    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_DAMPING);
+    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_MOTOR_FACTOR);
 
     const tInit = this.body.translation();
     this.prevPos.set(tInit.x, tInit.y, tInit.z);
@@ -143,13 +146,13 @@ export class Flipper {
   press(): void {
     const revolute = this.joint as RAPIER.RevoluteImpulseJoint;
     // Drive bat toward raised limit. The limit stops it cleanly.
-    revolute.configureMotorVelocity(this.pressDir * FLIPPER_PRESS_VEL, FLIPPER_DAMPING);
+    revolute.configureMotorVelocity(this.pressDir * FLIPPER_PRESS_VEL, FLIPPER_MOTOR_FACTOR);
   }
 
   release(): void {
     const revolute = this.joint as RAPIER.RevoluteImpulseJoint;
     // Drive back toward rest limit (slower than press for natural feel).
-    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_DAMPING);
+    revolute.configureMotorVelocity(-this.pressDir * FLIPPER_REST_VEL, FLIPPER_MOTOR_FACTOR);
   }
 
   cachePrev(): void {
